@@ -8,16 +8,8 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts"
   },
-  "devDependencies": {
-    "@repo/db": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
-    "tsx": "^4.21.0"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
+    "@repo/db": "workspace:*",
     "@types/express": "^5.0.6",
     "express": "^5.2.1"
   }
