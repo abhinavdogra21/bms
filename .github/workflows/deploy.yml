@@ -1,0 +1,90 @@
+name: Deploy Monorepo
+
+on:
+  push:
+    branches:
+      - production
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Generate Prisma Client
+        run: |
+          cd packages/prisma
+          pnpm dlx prisma generate
+
+      - name: Build Monorepo
+        run: npm run build
+
+      - name: Zip Build Artifacts
+        run: |
+          zip -r deploy.zip \
+            apps/ws-server/dist \
+            apps/http-server/dist \
+            apps/web/.next \
+            packages/prisma/dist \
+            packages/prisma/prisma/schema.prisma \
+            pnpm-workspace.yaml \
+            pnpm-lock.yaml \
+            $(find . -name "package.json" -not -path "*/node_modules/*" -not -path "*/.next/*")
+
+      - name: Set Target Server IP based on Branch
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/production" ]]; then
+            echo "SERVER_IP=32.236.42.222" >> $GITHUB_ENV
+          else
+            echo "SERVER_IP=3.104.106.15" >> $GITHUB_ENV
+          fi
+
+      - name: Copy Zip to Server via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ env.SERVER_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "deploy.zip"
+          target: "~/"
+
+      - name: Run Setup and Restart Apps on Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.SERVER_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Unzip the new files
+            unzip -o deploy.zip -d bms
+            
+            # Install production dependencies for Linux
+            cd ~/bms
+            pnpm install --prod
+            
+            # Generate Prisma client for Linux OS
+            cd ~/bms/packages/prisma
+            npx prisma generate
+            
+            # Restart all PM2 apps
+            pm2 restart ws-server || pm2 start ~/bms/apps/ws-server/dist/index.js --name ws-server
+            pm2 restart http-server || pm2 start ~/bms/apps/http-server/dist/index.js --name http-server
+            pm2 restart web-app || (cd ~/bms/apps/web && pm2 start "npm run start" --name web-app)
+            
+            # Save PM2 state
+            pm2 save
