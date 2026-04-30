@@ -3,9 +3,7 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./prisma/src",
-    "declaration": true,
-    "composite": true,
-    "incremental": true
+    "declaration": true
   },
   "include": ["prisma/src/**/*.ts"]
 }
