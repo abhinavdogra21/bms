@@ -54,37 +54,40 @@ jobs:
             echo "SERVER_IP=3.104.106.15" >> $GITHUB_ENV
           fi
 
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ env.SERVER_IP }} >> ~/.ssh/known_hosts
+
       - name: Copy Zip to Server via SCP
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ env.SERVER_IP }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "deploy.zip"
-          target: "~/"
+        run: |
+          scp -i ~/.ssh/deploy_key deploy.zip ubuntu@${{ env.SERVER_IP }}:~/
 
       - name: Run Setup and Restart Apps on Server
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ env.SERVER_IP }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
+        run: |
+          ssh -i ~/.ssh/deploy_key ubuntu@${{ env.SERVER_IP }} << 'EOF'
             # Unzip the new files
-            unzip -o deploy.zip -d bms
-            
+            unzip -o ~/deploy.zip -d ~/bms
+
             # Install production dependencies for Linux
             cd ~/bms
             pnpm install --prod
-            
+
             # Generate Prisma client for Linux OS
             cd ~/bms/packages/prisma
             npx prisma generate
-            
+
             # Restart all PM2 apps
             pm2 restart ws-server || pm2 start ~/bms/apps/ws-server/dist/index.js --name ws-server
             pm2 restart http-server || pm2 start ~/bms/apps/http-server/dist/index.js --name http-server
             pm2 restart web-app || (cd ~/bms/apps/web && pm2 start "npm run start" --name web-app)
-            
+
             # Save PM2 state
             pm2 save
+          EOF
+
+      - name: Cleanup SSH Key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
