@@ -68,6 +68,10 @@ jobs:
       - name: Run Setup and Restart Apps on Server
         run: |
           ssh -i ~/.ssh/deploy_key ubuntu@${{ env.SERVER_IP }} << 'EOF'
+            # Load shell profile so pnpm/npx/pm2 are in PATH
+            export PATH="$HOME/.local/share/pnpm:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node/ 2>/dev/null | tail -1)/bin:/usr/local/bin:$PATH"
+            source ~/.bashrc 2>/dev/null || source ~/.profile 2>/dev/null || true
+
             # Unzip the new files
             unzip -o ~/deploy.zip -d ~/bms
 
